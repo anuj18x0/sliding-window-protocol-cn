@@ -1,65 +1,392 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { 
+  Sender, 
+  Receiver, 
+  Channel, 
+  Controls, 
+  Explanation, 
+  ProtocolToggle, 
+  Logs,
+  Metrics,
+  NetworkSettings,
+  SequenceDiagram,
+  ComparisonView,
+} from './components';
+import {
+  ProtocolType,
+  SimulationState,
+  SimulationEvent,
+  createStopAndWaitState,
+  createGoBackNState,
+  createSelectiveRepeatState,
+} from './protocols';
+import { GitCompare, BarChart3, Activity } from 'lucide-react';
+
+interface ChannelPacket {
+  id: number;
+  type: 'data' | 'ack';
+  progress: number;
+  isLost: boolean;
+}
+
+function generateLossPattern(totalPackets: number, lossRate: number): number[] {
+  const pattern: number[] = [];
+  for (let i = 0; i < totalPackets; i++) {
+    if (Math.random() * 100 < lossRate) {
+      pattern.push(i);
+    }
+  }
+  return pattern.length > 0 ? pattern : [];
+}
+
+function createInitialState(
+  protocol: ProtocolType, 
+  totalPackets: number, 
+  windowSize: number, 
+  lossPattern: number[]
+): SimulationState {
+  switch (protocol) {
+    case 'stop-and-wait':
+      return createStopAndWaitState(totalPackets, lossPattern);
+    case 'go-back-n':
+      return createGoBackNState(totalPackets, windowSize, lossPattern);
+    case 'selective-repeat':
+      return createSelectiveRepeatState(totalPackets, windowSize, lossPattern);
+  }
+}
 
 export default function Home() {
+  const [protocol, setProtocol] = useState<ProtocolType>('stop-and-wait');
+  const [totalPackets, setTotalPackets] = useState(6);
+  const [windowSize, setWindowSize] = useState(4);
+  const [lossRate, setLossRate] = useState(20);
+  const [lossPattern, setLossPattern] = useState<number[]>([2]);
+  const [state, setState] = useState<SimulationState>(() => 
+    createInitialState('stop-and-wait', 6, 4, [2])
+  );
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(2000);
+  const [channelPackets, setChannelPackets] = useState<ChannelPacket[]>([]);
+  const [currentEvent, setCurrentEvent] = useState<SimulationEvent | null>(null);
+  const [logs, setLogs] = useState<SimulationEvent[]>([]);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
+  const [activeTab, setActiveTab] = useState<'logs' | 'metrics' | 'diagram'>('logs');
+  
+  const animationRef = useRef<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isPlayingRef = useRef(isPlaying);
+  const currentIndexRef = useRef(-1);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const cleanup = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  }, []);
+
+  const handleProtocolChange = useCallback((newProtocol: ProtocolType) => {
+    cleanup();
+    setProtocol(newProtocol);
+    setState(createInitialState(newProtocol, totalPackets, windowSize, lossPattern));
+    setIsPlaying(false);
+    setChannelPackets([]);
+    setCurrentEvent(null);
+    setLogs([]);
+    setIsAnimating(false);
+    currentIndexRef.current = -1;
+  }, [cleanup, totalPackets, windowSize, lossPattern]);
+
+  const animatePacket = useCallback((
+    packetId: number,
+    type: 'data' | 'ack',
+    isLost: boolean
+  ): Promise<void> => {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      const duration = speed * 0.6;
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        setChannelPackets([{ id: packetId, type, progress, isLost }]);
+
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          setChannelPackets([]);
+          resolve();
+        }
+      };
+
+      animationRef.current = requestAnimationFrame(animate);
+    });
+  }, [speed]);
+
+  const processEvent = useCallback(async (event: SimulationEvent): Promise<void> => {
+    setCurrentEvent(event);
+    setLogs(prev => [...prev, event]);
+
+    const needsAnimation = ['send', 'ack-send'].includes(event.type);
+    const isLoss = event.type === 'loss';
+
+    if (needsAnimation) {
+      const type = event.type === 'send' ? 'data' : 'ack';
+      await animatePacket(event.packetId, type, false);
+    } else if (isLoss) {
+      await animatePacket(event.packetId, 'data', true);
+    } else {
+      await new Promise(resolve => {
+        timeoutRef.current = setTimeout(resolve, speed * 0.3);
+      });
+    }
+  }, [animatePacket, speed]);
+
+  const runSimulation = useCallback(async () => {
+    const events = state.events;
+    
+    while (currentIndexRef.current < events.length - 1 && isPlayingRef.current) {
+      currentIndexRef.current++;
+      const event = events[currentIndexRef.current];
+      
+      setState(prev => ({
+        ...prev,
+        currentEventIndex: currentIndexRef.current,
+        senderWindow: event.senderWindow,
+        receiverWindow: event.receiverWindow,
+        isComplete: currentIndexRef.current >= events.length - 1,
+      }));
+
+      setIsAnimating(true);
+      await processEvent(event);
+      setIsAnimating(false);
+
+      if (currentIndexRef.current >= events.length - 1) {
+        setIsPlaying(false);
+        setState(prev => ({ ...prev, isComplete: true }));
+        break;
+      }
+
+      await new Promise(resolve => {
+        timeoutRef.current = setTimeout(resolve, speed * 0.2);
+      });
+    }
+  }, [state.events, processEvent, speed]);
+
+  useEffect(() => {
+    if (isPlaying && !isAnimating) {
+      runSimulation();
+    }
+  }, [isPlaying]);
+
+  const handleStart = useCallback(() => {
+    if (state.isComplete) return;
+    setIsPlaying(true);
+  }, [state.isComplete]);
+
+  const handlePause = useCallback(() => {
+    setIsPlaying(false);
+    cleanup();
+  }, [cleanup]);
+
+  const handleReset = useCallback(() => {
+    cleanup();
+    setIsPlaying(false);
+    setState(createInitialState(protocol, totalPackets, windowSize, lossPattern));
+    setChannelPackets([]);
+    setCurrentEvent(null);
+    setLogs([]);
+    setIsAnimating(false);
+    currentIndexRef.current = -1;
+  }, [protocol, cleanup]);
+
+  const handleLossRateChange = (rate: number) => {
+    setLossRate(rate);
+    const newPattern = generateLossPattern(totalPackets, rate);
+    setLossPattern(newPattern);
+  };
+
+  const handleTotalPacketsChange = (count: number) => {
+    setTotalPackets(count);
+    const newPattern = generateLossPattern(count, lossRate);
+    setLossPattern(newPattern);
+  };
+
+  const handleWindowSizeChange = (size: number) => {
+    setWindowSize(size);
+  };
+
+  const handleRandomizeLoss = () => {
+    const newPattern = generateLossPattern(totalPackets, lossRate);
+    setLossPattern(newPattern);
+    setState(createInitialState(protocol, totalPackets, windowSize, newPattern));
+    setLogs([]);
+    setCurrentEvent(null);
+    currentIndexRef.current = -1;
+  };
+
+  const isSimulationActive = isPlaying || state.currentEventIndex >= 0;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
+      <header className="py-3 px-6 border-b-2 border-black flex-shrink-0">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 
+              className="text-xl md:text-2xl font-bold tracking-tight"
+              style={{ fontFamily: 'var(--font-space-grotesk)' }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Sliding Window Protocol Visualizer
+            </h1>
+            <p className="text-xs text-gray-600">
+              How computers send data reliably
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowComparison(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border-2 border-black hover:bg-gray-100 transition-colors"
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <GitCompare className="w-4 h-4" />
+              Compare
+            </button>
+            <ProtocolToggle selected={protocol} onChange={handleProtocolChange} />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      <main className="flex-1 flex min-h-0">
+        <div className="w-56 border-r-2 border-black p-3 flex flex-col gap-3 overflow-y-auto flex-shrink-0">
+          <NetworkSettings
+            lossRate={lossRate}
+            onLossRateChange={handleLossRateChange}
+            totalPackets={totalPackets}
+            onTotalPacketsChange={handleTotalPacketsChange}
+            windowSize={windowSize}
+            onWindowSizeChange={handleWindowSizeChange}
+            onRandomizeLoss={handleRandomizeLoss}
+            disabled={isSimulationActive}
+          />
+          
+          <div className="text-xs text-gray-500 p-2 bg-gray-50 border border-gray-200">
+            <div className="font-bold mb-1">Loss Pattern:</div>
+            <div className="font-mono">
+              {lossPattern.length > 0 ? lossPattern.join(', ') : 'None'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 flex items-center justify-center p-3">
+            <div className="w-full max-w-3xl flex items-center justify-between gap-2">
+              <Sender
+                window={state.senderWindow}
+                totalPackets={totalPackets}
+              />
+              
+              <Channel packets={channelPackets} />
+              
+              <Receiver
+                expected={state.receiverWindow.expected}
+                buffer={state.receiverWindow.buffer}
+                totalPackets={totalPackets}
+                protocol={protocol}
+              />
+            </div>
+          </div>
+
+          <Explanation
+            event={currentEvent}
+            eventIndex={state.currentEventIndex}
+            totalEvents={state.events.length}
+          />
+
+          <Controls
+            isPlaying={isPlaying}
+            onStart={handleStart}
+            onPause={handlePause}
+            onReset={handleReset}
+            speed={speed}
+            onSpeedChange={setSpeed}
+            isComplete={state.isComplete}
+          />
+        </div>
+
+        <div className="w-72 border-l-2 border-black flex flex-col flex-shrink-0">
+          <div className="flex border-b border-gray-300">
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+                activeTab === 'logs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+              }`}
+            >
+              Logs
+            </button>
+            <button
+              onClick={() => setActiveTab('metrics')}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors border-l border-gray-300 ${
+                activeTab === 'metrics' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+              }`}
+            >
+              <BarChart3 className="w-3 h-3 inline mr-1" />
+              Stats
+            </button>
+            <button
+              onClick={() => setActiveTab('diagram')}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors border-l border-gray-300 ${
+                activeTab === 'diagram' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+              }`}
+            >
+              <Activity className="w-3 h-3 inline mr-1" />
+              Seq
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-hidden">
+            {activeTab === 'logs' && (
+              <Logs events={logs} currentEventId={currentEvent?.id} />
+            )}
+            {activeTab === 'metrics' && (
+              <div className="p-3 overflow-y-auto h-full">
+                <Metrics
+                  events={state.events}
+                  currentEventIndex={state.currentEventIndex}
+                  protocol={protocol}
+                />
+              </div>
+            )}
+            {activeTab === 'diagram' && (
+              <div className="p-3 overflow-y-auto h-full">
+                <SequenceDiagram
+                  events={state.events}
+                  currentEventIndex={state.currentEventIndex}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </main>
+
+      <ComparisonView
+        totalPackets={totalPackets}
+        windowSize={windowSize}
+        lossPattern={lossPattern}
+        speed={speed}
+        isOpen={showComparison}
+        onClose={() => setShowComparison(false)}
+      />
     </div>
   );
 }
