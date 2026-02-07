@@ -1,127 +1,112 @@
 # Sliding Window Protocol Visualizer
 
-An educational, black-and-white interactive lab for understanding how reliable data transfer works. The app walks through three classic sliding window protocols and lets you experiment with network conditions, packet loss, and recovery strategies in real time.
+An educational visualization tool for understanding data link layer protocols and flow control mechanisms. Features four different protocols with step-by-step animations and plain-English explanations.
 
-## Table of Contents
+## Protocols
 
-1. [Protocols Covered](#protocols-covered)
-2. [Feature Highlights](#feature-highlights)
-3. [Quick Start](#quick-start)
-4. [Using the Visualizer](#using-the-visualizer)
-5. [Application Layout](#application-layout)
-6. [Architecture](#architecture)
-7. [Tech Stack](#tech-stack)
-8. [Further Ideas](#further-ideas)
+### 1. Stop-and-Wait (S&W)
+The simplest protocol. Sender transmits one packet and waits for acknowledgment before sending the next. If ACK doesn't arrive (timeout), the packet is retransmitted.
 
-## Protocols Covered
+### 2. Go-Back-N (GBN)
+Uses a sliding window to send multiple packets. If a packet is lost, the receiver discards all subsequent packets, and the sender must retransmit from the lost packet onwards.
 
-- **Stop-and-Wait** – one packet in flight; sender pauses until the ACK returns.
-- **Go-Back-N** – windowed sending; any lost packet forces retransmission of that packet and everything after it.
-- **Selective Repeat** – windowed sending with per-packet acknowledgements and buffering of out-of-order data.
+### 3. Selective Repeat (SR)
+More efficient than Go-Back-N. The receiver buffers out-of-order packets and only requests retransmission of the specific lost packet.
 
-Each protocol ships with detailed, narrative explanations of every event so beginners can follow the story.
+### 4. Flow Control (FC)
+Pure flow control without error handling. Demonstrates how receivers control transmission speed using advertised window size. No packet loss, no retransmissions — focuses purely on buffer management.
 
-## Feature Highlights
+## Features
 
-- **Monochrome Interface** – calm black/white palette that keeps the focus on motion and story.
-- **Dynamic Animations** – eased packet travel, loss explosions, and sender/receiver status updates.
-- **Storytelling Explanations** – plain-language event summaries with Lucide icons instead of emojis.
-- **Interactive Network Settings**
-  - Loss probability slider (0–50%).
-  - Total packet count (4–12).
-  - Window size (1–6).
-  - “Randomize Loss Pattern” to generate new scenarios instantly.
-- **Performance Metrics Dashboard**
-  - Efficiency (delivered vs sent).
-  - Throughput (delivered packets per simulation step).
-  - Retransmission count.
-  - Loss count and ACKs received.
-- **Sequence Diagram View** – live sequence diagram with export-to-PNG support (via `html2canvas`).
-- **Logs Panel** – chronological event stream with active-step highlighting.
-- **Protocol Comparison Modal** – run Go-Back-N and Selective Repeat side by side on the same loss pattern.
-- **Export** – download the current sequence diagram as a PNG for coursework or reports.
+- **Black & white UI** — minimal, calm, educational
+- **Step-by-step animations** — one packet at a time
+- **Plain-English explanations** — no jargon
+- **Network settings** — configurable loss rate, packet count, window size
+- **Performance metrics** — efficiency, throughput, retransmissions
+- **Sequence diagram** — visual timeline with PNG export
+- **Protocol comparison** — side-by-side Go-Back-N vs Selective Repeat
 
 ## Quick Start
 
 ```bash
-# install dependencies
 npm install
-
-# start the development server
 npm run dev
-
-# optional: type-check
-npm run lint
 ```
 
-Visit **http://localhost:3000** once the dev server is up.
+Open **http://localhost:3000**
 
-## Using the Visualizer
+## Controls
 
-1. **Choose a Protocol** – Stop-and-Wait, Go-Back-N, or Selective Repeat via the top-right toggle.
-2. **Configure the Network** *(left sidebar)* – adjust loss probability, packet count, and window size. Randomize the loss pattern if you need a new scenario.
-3. **Control Playback** *(bottom center)* – Start, Pause, Reset, and adjust speed (slow, medium, fast).
-4. **Watch the Story** – follow the sender/receiver visuals, channel animations, and the explanation card.
-5. **Dive into Details** *(right sidebar tabs)*:
-   - **Logs** – textual timeline of every event.
-   - **Stats** – performance metrics updated live.
-   - **Seq** – sequence diagram; export via the PNG button.
-6. **Compare Protocols** – press **Compare** in the header to open the modal that runs Go-Back-N vs Selective Repeat simultaneously with synchronized metrics.
+| Button | Action |
+|--------|--------|
+| **Start** | Begin automatic playback |
+| **Pause** | Stop playback |
+| **Step** | Advance one event (Flow Control only) |
+| **Reset** | Return to initial state |
+| **Speed** | Slow / Normal / Fast |
 
-> **Tip:** The simulation auto-pauses at the end. Press Reset after tweaking network settings to regenerate state using the latest configuration.
-
-## Application Layout
+## Project Structure
 
 ```
 app/
 ├── components/
-│   ├── Channel.tsx          # Cable, packet animations, network icons
-│   ├── ComparisonView.tsx   # Side-by-side protocol comparison modal
-│   ├── Controls.tsx         # Playback controls + speed selection
-│   ├── Explanation.tsx      # Storytelling event card with progress bar
-│   ├── Logs.tsx             # Event log panel
-│   ├── Metrics.tsx          # Performance metrics dashboard
-│   ├── NetworkSettings.tsx  # Loss rate, packet count, window size sliders
-│   ├── Packet.tsx           # Visual representation + animation logic
-│   ├── ProtocolToggle.tsx   # Protocol selector
-│   ├── Receiver.tsx         # Receiver window + buffer display
-│   ├── Sender.tsx           # Sender window visualization
-│   └── SequenceDiagram.tsx  # Live diagram + PNG export
+│   ├── Sender.tsx          # ARQ protocol sender
+│   ├── Receiver.tsx        # ARQ protocol receiver
+│   ├── Channel.tsx         # Network channel animation
+│   ├── Controls.tsx        # Playback controls
+│   ├── Explanation.tsx     # Event explanations
+│   ├── ProtocolToggle.tsx  # Protocol selector
+│   ├── Logs.tsx            # Event log panel
+│   ├── Metrics.tsx         # Performance metrics
+│   ├── NetworkSettings.tsx # Configuration panel
+│   ├── SequenceDiagram.tsx # Timeline visualization
+│   ├── ComparisonView.tsx  # Side-by-side comparison
+│   ├── FlowSender.tsx      # Flow control sender
+│   ├── FlowReceiver.tsx    # Flow control receiver
+│   ├── FlowChannel.tsx     # Flow control channel
+│   ├── FlowControls.tsx    # Flow control playback
+│   └── FlowExplanation.tsx # Flow control explanations
 ├── protocols/
-│   ├── stopAndWait.ts
-│   ├── goBackN.ts
-│   ├── selectiveRepeat.ts
-│   └── types.ts             # Shared protocol types
-├── globals.css              # Monochrome theme + Tailwind layers
-├── layout.tsx               # Root layout and font registration
-└── page.tsx                 # App state orchestration and layout
+│   ├── types.ts            # Shared type definitions
+│   ├── stopAndWait.ts      # Stop-and-Wait logic
+│   ├── goBackN.ts          # Go-Back-N logic
+│   ├── selectiveRepeat.ts  # Selective Repeat logic
+│   └── flowControl.ts      # Flow Control logic
+├── globals.css             # Black & white theme
+├── layout.tsx              # Fonts and metadata
+└── page.tsx                # Main application
 ```
 
-## Architecture
+## Flow Control Mode
 
-- **State Management** – Local React state orchestrates the simulation, referencing protocol-specific event generators.
-- **Protocol Engines** – Each protocol file exports a `create<State>` factory producing a deterministic event list for the configured packet count, window size, and loss pattern.
-- **Animation Loop** – `page.tsx` drives animations via `requestAnimationFrame` for packets and `setTimeout` pacing between events.
-- **Metrics & Logs** – Metrics derive from the processed subset of events; logs persist the chronological history for playback.
-- **Sequence Diagram** – Mirrors the processed events onto a sender/receiver timeline with export capability.
-- **Comparison Modal** – Rehydrates two separate simulations (Go-Back-N and Selective Repeat) and steps them in lockstep for live comparison.
+When you select **Flow Control**, the UI switches to a simplified view focused purely on receiver-controlled data flow:
+
+- **No packet loss** — all packets arrive
+- **No retransmissions** — no error recovery
+- **Buffer visualization** — see packets fill the receiver buffer
+- **Window size display** — watch advertised window change
+- **Waiting state** — sender stops when buffer is full
+
+This mode demonstrates the core concept:
+> The receiver tells the sender how much data it can accept.
+
+## Design Philosophy
+
+- **Calm** — No flashy colors or distracting animations
+- **Educational** — One idea at a time
+- **Simple** — Understandable by beginners
+- **Minimal** — Clean, focused interface
+- **Premium** — Professional typography and spacing
 
 ## Tech Stack
 
-- **Framework** – Next.js 14 (App Router)
-- **Language** – TypeScript
-- **Styling** – Tailwind CSS with a custom monochrome theme
-- **Icons** – `lucide-react`
-- **Fonts** – Inter, Space Grotesk, JetBrains Mono via `next/font`
-- **Export Utility** – `html2canvas` for PNG sequence diagrams
-
-## Further Ideas
-
-- Manual packet loss injection (click a packet while it travels to drop it).
-- Classroom mode: instructor vs student scores based on efficiency.
-- Generate printable summaries (PDF) combining metrics, logs, and the exported diagram.
-- Accessibility pass (keyboard-native controls, narration).
+- **Next.js 14** — React framework
+- **TypeScript** — Type safety
+- **Tailwind CSS** — Styling
+- **Lucide React** — Icons
+- **html2canvas** — PNG export
+- **Fonts** — Space Grotesk, Inter, JetBrains Mono
 
 ---
 
-Designed for calm storytelling, clear signal flow, and quick comparisons between the major sliding window strategies.
+Built for Computer Networks coursework. Designed to be understood by anyone.

@@ -1,4 +1,4 @@
-export type ProtocolType = 'stop-and-wait' | 'go-back-n' | 'selective-repeat';
+export type ProtocolType = 'stop-and-wait' | 'go-back-n' | 'selective-repeat' | 'flow-control';
 
 export type EventType = 
   | 'send' 

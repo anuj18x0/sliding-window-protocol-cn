@@ -22,6 +22,7 @@ import {
   createGoBackNState,
   createSelectiveRepeatState,
 } from './protocols';
+import { createFlowControlState } from './protocols/flowControl';
 import { GitCompare, BarChart3, Activity } from 'lucide-react';
 
 interface ChannelPacket {
@@ -54,6 +55,10 @@ function createInitialState(
       return createGoBackNState(totalPackets, windowSize, lossPattern);
     case 'selective-repeat':
       return createSelectiveRepeatState(totalPackets, windowSize, lossPattern);
+    case 'flow-control':
+      return createFlowControlState(totalPackets, windowSize, lossPattern);
+    default:
+      return createStopAndWaitState(totalPackets, lossPattern);
   }
 }
 
@@ -67,7 +72,7 @@ export default function Home() {
     createInitialState('stop-and-wait', 6, 4, [2])
   );
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(2000);
+  const [speed, setSpeed] = useState(1000);
   const [channelPackets, setChannelPackets] = useState<ChannelPacket[]>([]);
   const [currentEvent, setCurrentEvent] = useState<SimulationEvent | null>(null);
   const [logs, setLogs] = useState<SimulationEvent[]>([]);
@@ -79,6 +84,8 @@ export default function Home() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isPlayingRef = useRef(isPlaying);
   const currentIndexRef = useRef(-1);
+
+  const isFlowControl = protocol === 'flow-control';
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -209,7 +216,7 @@ export default function Home() {
     setLogs([]);
     setIsAnimating(false);
     currentIndexRef.current = -1;
-  }, [protocol, cleanup]);
+  }, [protocol, cleanup, totalPackets, windowSize, lossPattern]);
 
   const handleLossRateChange = (rate: number) => {
     setLossRate(rate);
@@ -247,21 +254,23 @@ export default function Home() {
               className="text-xl md:text-2xl font-bold tracking-tight"
               style={{ fontFamily: 'var(--font-space-grotesk)' }}
             >
-              Sliding Window Protocol Visualizer
+              {isFlowControl ? 'Flow Control using Sliding Window' : 'Sliding Window Protocol Visualizer'}
             </h1>
             <p className="text-xs text-gray-600">
-              How computers send data reliably
+              {isFlowControl ? 'How receivers control data speed' : 'How computers send data reliably'}
             </p>
           </div>
           
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowComparison(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border-2 border-black hover:bg-gray-100 transition-colors"
-            >
-              <GitCompare className="w-4 h-4" />
-              Compare
-            </button>
+            {!isFlowControl && (
+              <button
+                onClick={() => setShowComparison(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border-2 border-black hover:bg-gray-100 transition-colors"
+              >
+                <GitCompare className="w-4 h-4" />
+                Compare
+              </button>
+            )}
             <ProtocolToggle selected={protocol} onChange={handleProtocolChange} />
           </div>
         </div>
@@ -278,14 +287,24 @@ export default function Home() {
             onWindowSizeChange={handleWindowSizeChange}
             onRandomizeLoss={handleRandomizeLoss}
             disabled={isSimulationActive}
+            isFlowControl={isFlowControl}
           />
           
-          <div className="text-xs text-gray-500 p-2 bg-gray-50 border border-gray-200">
-            <div className="font-bold mb-1">Loss Pattern:</div>
-            <div className="font-mono">
-              {lossPattern.length > 0 ? lossPattern.join(', ') : 'None'}
+          {!isFlowControl && (
+            <div className="text-xs text-gray-500 p-2 bg-gray-50 border border-gray-200">
+              <div className="font-bold mb-1">Loss Pattern:</div>
+              <div className="font-mono">
+                {lossPattern.length > 0 ? lossPattern.join(', ') : 'None'}
+              </div>
             </div>
-          </div>
+          )}
+          
+          {isFlowControl && (
+            <div className="text-xs text-gray-500 p-2 bg-gray-50 border border-gray-200">
+              <div className="font-bold mb-1">Flow Control Mode</div>
+              <div>No packet loss. Receiver controls transmission speed via advertised window.</div>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 flex flex-col min-h-0">
@@ -379,14 +398,16 @@ export default function Home() {
         </div>
       </main>
 
-      <ComparisonView
-        totalPackets={totalPackets}
-        windowSize={windowSize}
-        lossPattern={lossPattern}
-        speed={speed}
-        isOpen={showComparison}
-        onClose={() => setShowComparison(false)}
-      />
+      {!isFlowControl && (
+        <ComparisonView
+          totalPackets={totalPackets}
+          windowSize={windowSize}
+          lossPattern={lossPattern}
+          speed={speed}
+          isOpen={showComparison}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
     </div>
   );
 }
