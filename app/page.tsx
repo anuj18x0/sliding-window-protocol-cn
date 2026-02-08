@@ -61,13 +61,13 @@ function createInitialState(
 }
 
 export default function Home() {
-  const [protocol, setProtocol] = useState<ProtocolType>('stop-and-wait');
+  const [protocol, setProtocol] = useState<ProtocolType>('go-back-n');
   const [totalPackets, setTotalPackets] = useState(6);
   const [windowSize, setWindowSize] = useState(4);
   const [lossRate, setLossRate] = useState(20);
   const [lossPattern, setLossPattern] = useState<number[]>([2]);
   const [state, setState] = useState<SimulationState>(() => 
-    createInitialState('stop-and-wait', 6, 4, [2])
+    createInitialState('go-back-n', 6, 4, [2])
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1000);

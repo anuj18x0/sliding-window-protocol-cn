@@ -9,7 +9,6 @@ interface ProtocolToggleProps {
 }
 
 const protocols: { id: ProtocolType; label: string; shortLabel: string }[] = [
-  { id: 'stop-and-wait', label: 'Stop-and-Wait', shortLabel: 'S&W' },
   { id: 'go-back-n', label: 'Go-Back-N', shortLabel: 'GBN' },
   { id: 'selective-repeat', label: 'Selective Repeat', shortLabel: 'SR' },
   { id: 'flow-control', label: 'Flow Control', shortLabel: 'FC' },
