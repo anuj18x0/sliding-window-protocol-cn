@@ -49,8 +49,6 @@ function createInitialState(
   lossPattern: number[]
 ): SimulationState {
   switch (protocol) {
-    case 'stop-and-wait':
-      return createStopAndWaitState(totalPackets, lossPattern);
     case 'go-back-n':
       return createGoBackNState(totalPackets, windowSize, lossPattern);
     case 'selective-repeat':
@@ -58,7 +56,7 @@ function createInitialState(
     case 'flow-control':
       return createFlowControlState(totalPackets, windowSize, lossPattern);
     default:
-      return createStopAndWaitState(totalPackets, lossPattern);
+      return createGoBackNState(totalPackets, windowSize, lossPattern);
   }
 }
 
